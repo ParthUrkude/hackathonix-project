@@ -1,0 +1,184 @@
+"""
+resume_parser.py – Extract text and skills from PDF/DOCX resumes.
+"""
+
+import os
+import re
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# PDF parsing (pdfplumber preferred, PyPDF2 as fallback)
+# ---------------------------------------------------------------------------
+
+def parse_pdf(file_path: str) -> str:
+    """Extract text from a PDF file."""
+    text = ""
+    # Try pdfplumber first (handles complex layouts better)
+    try:
+        import pdfplumber
+        with pdfplumber.open(file_path) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+        if text.strip():
+            return text
+    except Exception:
+        pass
+
+    # Fallback: PyPDF2
+    try:
+        import PyPDF2
+        with open(file_path, "rb") as f:
+            reader = PyPDF2.PdfReader(f)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+    except Exception as e:
+        print(f"[resume_parser] PDF parse error for {file_path}: {e}")
+
+    return text
+
+
+# ---------------------------------------------------------------------------
+# DOCX parsing
+# ---------------------------------------------------------------------------
+
+def parse_docx(file_path: str) -> str:
+    """Extract text from a DOCX file."""
+    try:
+        from docx import Document
+        doc = Document(file_path)
+        paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+        return "\n".join(paragraphs)
+    except Exception as e:
+        print(f"[resume_parser] DOCX parse error for {file_path}: {e}")
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# Dispatcher
+# ---------------------------------------------------------------------------
+
+def extract_text(file_path: str) -> str:
+    """Auto-detect file type and extract text."""
+    ext = Path(file_path).suffix.lower()
+    if ext == ".pdf":
+        return parse_pdf(file_path)
+    elif ext in (".docx", ".doc"):
+        return parse_docx(file_path)
+    else:
+        # Try reading as plain text
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                return f.read()
+        except Exception:
+            return ""
+
+
+# ---------------------------------------------------------------------------
+# Candidate name derivation
+# ---------------------------------------------------------------------------
+
+def extract_name(filename: str) -> str:
+    """
+    Derive a human-readable candidate name from the filename.
+    E.g. 'john_doe_resume.pdf' → 'John Doe'
+    """
+    stem = Path(filename).stem  # strip extension
+    # Remove common suffixes
+    stem = re.sub(r'(?i)[_\-\s]*(resume|cv|application|final|updated|new)', '', stem)
+    # Replace separators with spaces
+    stem = re.sub(r'[_\-\.]+', ' ', stem)
+    stem = stem.strip()
+    # Title-case each word
+    return stem.title() if stem else filename
+
+
+# ---------------------------------------------------------------------------
+# Skills extraction
+# ---------------------------------------------------------------------------
+
+SKILLS_VOCABULARY = {
+    # Programming languages
+    "Python", "Java", "JavaScript", "TypeScript", "C", "C++", "C#", "Go",
+    "Rust", "Ruby", "PHP", "Swift", "Kotlin", "Scala", "R", "MATLAB",
+    "Perl", "Shell", "Bash", "PowerShell",
+    # Web / frontend
+    "React", "Angular", "Vue", "Next.js", "Nuxt", "Svelte",
+    "HTML", "CSS", "Sass", "SCSS", "Tailwind",
+    # Backend / frameworks
+    "Node.js", "Express", "Django", "Flask", "FastAPI", "Spring Boot",
+    "Laravel", "Rails", "ASP.NET",
+    # Databases
+    "SQL", "MySQL", "PostgreSQL", "SQLite", "MongoDB", "Redis",
+    "Elasticsearch", "Cassandra", "DynamoDB", "Firebase", "Oracle",
+    # Cloud & DevOps
+    "AWS", "Azure", "GCP", "Google Cloud", "Docker", "Kubernetes",
+    "Terraform", "Ansible", "Jenkins", "GitHub Actions", "CI/CD",
+    "Linux", "Nginx", "Apache",
+    # AI / ML / Data
+    "Machine Learning", "Deep Learning", "NLP", "Computer Vision",
+    "TensorFlow", "PyTorch", "Keras", "scikit-learn", "Pandas",
+    "NumPy", "Matplotlib", "Seaborn", "Tableau", "Power BI",
+    "Data Analysis", "Data Science", "Big Data", "Spark", "Hadoop",
+    "OpenAI", "LangChain", "HuggingFace",
+    # Tools
+    "Git", "GitHub", "GitLab", "Bitbucket", "Jira", "Confluence",
+    "Figma", "Postman", "VS Code",
+    # Soft / domain / industry
+    "REST API", "GraphQL", "Microservices", "Agile", "Scrum",
+    "Unit Testing", "TDD", "OOP", "Design Patterns",
+    "Communication", "Leadership", "Problem Solving", "Teamwork",
+    "Management", "Project Management", "Marketing", "Sales",
+    "Customer Support", "Data Entry", "Finance", "Accounting",
+    "HR", "Recruitment", "SEO", "Social Media",
+    "Negotiation", "Critical Thinking", "Creativity", "Time Management",
+    "Strategy", "Planning", "Research", "Analysis", "English", "Hindi",
+    "Writing", "Editing", "Directing", "Operations", "Production",
+    "Artist", "Design", "Graphics", "Adobe", "Photoshop", "Illustrator",
+}
+
+# Build a lower-cased lookup for fast matching
+_SKILLS_LOWER = {s.lower(): s for s in SKILLS_VOCABULARY}
+
+
+def extract_skills(text: str, auto_keywords: bool = False) -> list[str]:
+    """Return a de-duplicated list of detected skills. If auto_keywords is True and no skills found, try to extract nouns."""
+    if not text:
+        return []
+
+    text_lower = text.lower()
+    found = set()
+
+    for skill_lower, skill_display in _SKILLS_LOWER.items():
+        # Use word-boundary-aware search for short skills (<= 3 chars avoid false positives)
+        if len(skill_lower) <= 2:
+            pattern = r'\b' + re.escape(skill_lower) + r'\b'
+        else:
+            pattern = re.escape(skill_lower)
+        if re.search(pattern, text_lower):
+            found.add(skill_display)
+
+    if not found and auto_keywords:
+        # Fallback: Extract words that look like keywords
+        # 1. Any word 3+ chars long that starts with an Uppercase letter (Proper Nouns/Skills)
+        # 2. Any word 4+ chars long that isn't a common stop word
+        STOP_WORDS = {
+            "looking", "required", "experience", "candidate", "position", "company", "skills", 
+            "ability", "working", "knowledge", "years", "description", "requirements",
+            "highly", "strong", "excellent", "provide", "within", "across", "support",
+            "please", "wanted", "needed", "about", "would", "could", "should", "there"
+        }
+        # Title case words (3+) or any words (4+)
+        candidates = re.findall(r'\b[A-Z][a-z]{2,}\b|\b[A-Za-z]{4,}\b', text)
+        for w in candidates:
+            if w.lower() not in STOP_WORDS:
+                found.add(w.strip('.,()'))
+        
+        # Sort by length (desc) then alpha to get "better" keywords first, then take top 15
+        sorted_found = sorted(list(found), key=lambda x: (-len(x), x))
+        return sorted_found[:15]
+
+    return sorted(found)
