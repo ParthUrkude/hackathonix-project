@@ -1,0 +1,332 @@
+import re
+import sys
+
+def modify_file(filepath):
+    with open(filepath, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # 1. Add state for expandable table rows
+    content = content.replace(
+        "const [selectedCandidate, setSelectedCandidate] = useState(null)",
+        "const [selectedCandidate, setSelectedCandidate] = useState(null)\n  const [expandedRow, setExpandedRow] = useState(null)"
+    )
+
+    # 2. Update Stats Logic (above80, below60)
+    content = content.replace("let below50 = 0", "let below60 = 0")
+    content = content.replace("if (r.score < 50) below50++", "if (r.score < 60) below60++")
+    content = content.replace("below50,", "below60,")
+    content = content.replace("below50", "below60") 
+    content = content.replace(
+        "{ name: '50% - 80%', value: stats.total - stats.above80 - stats.below60, fill: COLORS.med },",
+        "{ name: '60% - 80%', value: stats.total - stats.above80 - stats.below60, fill: COLORS.med },"
+    )
+    content = content.replace(
+        "{ name: '< 50%', value: stats.below60, fill: COLORS.low },",
+        "{ name: '< 60%', value: stats.below60, fill: COLORS.low },"
+    )
+
+    # 3. Update Header
+    header_old = """        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-blue-500 flex items-center justify-center">
+            <BrainCircuit className="w-5 h-5 text-white" />
+          </div>
+          <span className="font-bold text-white text-lg">MatchMyCV</span>
+        </div>"""
+    header_new = """        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-blue-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
+            <BrainCircuit className="w-6 h-6 text-white" />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-extrabold text-white text-xl tracking-tight leading-none bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">MATCHMYCV</span>
+            <span className="text-[10px] text-violet-300 font-medium tracking-widest uppercase mt-1">AI-Powered Resume Matching & Candidate Intelligence</span>
+          </div>
+        </div>"""
+    content = content.replace(header_old, header_new)
+
+    # 4. Update Overview StatCards Section (Adding Hiring Recommendation Panel)
+    statscards_old = """        {/* ── 10 ANALYTICS CARDS GRID ─────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 animate-slide-up delay-100">
+          <StatCard title="Average Match" value={`${stats.avgScore}%`} />
+          <StatCard title="Highest Score" value={`${stats.highest}%`} color="text-amber-400" />
+          <StatCard title="Lowest Score" value={`${stats.lowest}%`} color="text-rose-400" />
+          <StatCard title="Highly Qualified (>80%)" value={stats.above80} color="text-emerald-400" />
+          <StatCard title="Underqualified (<50%)" value={stats.below60} color="text-slate-400" />
+          
+          <StatCard title="Avg Skill Coverage" value={`${stats.avgSkillCov}%`} />
+          <StatCard title="Required Skills" value={jd_skills.length} />
+          <StatCard title="Most Common Skill" value={stats.mostCommonSkill} />
+          <StatCard title="Avg Resume Strength" value={`${stats.avgStrength}/100`} />
+          <StatCard title="Top Candidate Coverage" value={`${top.skill_coverage?.toFixed(1) || 0}%`} color="text-amber-400" />
+        </div>"""
+    
+    statscards_new = """        {/* ── 10 ANALYTICS CARDS GRID ─────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 animate-slide-up delay-100">
+          <StatCard title="Average Match" value={`${stats.avgScore}%`} />
+          <StatCard title="Highest Score" value={`${stats.highest}%`} color="text-amber-400" />
+          <StatCard title="Lowest Score" value={`${stats.lowest}%`} color="text-rose-400" />
+          
+          <div className="glass-card p-4 rounded-xl flex flex-col justify-center lg:col-span-2 border border-violet-500/20 bg-violet-500/5">
+            <p className="text-xs text-violet-300 mb-2 font-semibold uppercase tracking-wider">Hiring Recommendation</p>
+            <div className="flex justify-between items-end gap-2 text-sm">
+              <div className="text-center bg-emerald-500/10 px-3 py-2 rounded-lg border border-emerald-500/20 flex-1">
+                <span className="block text-xl font-bold text-emerald-400">{stats.above80}</span>
+                <span className="text-[10px] text-slate-400">Recommended (&gt;80%)</span>
+              </div>
+              <div className="text-center bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-500/20 flex-1">
+                <span className="block text-xl font-bold text-blue-400">{stats.total - stats.above80 - stats.below60}</span>
+                <span className="text-[10px] text-slate-400">Needs Review (60-80%)</span>
+              </div>
+              <div className="text-center bg-rose-500/10 px-3 py-2 rounded-lg border border-rose-500/20 flex-1">
+                <span className="block text-xl font-bold text-rose-400">{stats.below60}</span>
+                <span className="text-[10px] text-slate-400">Low Match (&lt;60%)</span>
+              </div>
+            </div>
+          </div>
+          
+          <StatCard title="Avg Skill Coverage" value={`${stats.avgSkillCov}%`} />
+          <StatCard title="Required Skills" value={jd_skills.length} />
+          <StatCard title="Most Common Skill" value={stats.mostCommonSkill} />
+          <StatCard title="Avg Resume Strength" value={`${stats.avgStrength}/100`} />
+          <StatCard title="Top Candidate Coverage" value={`${top.skill_coverage?.toFixed(1) || 0}%`} color="text-amber-400" />
+        </div>"""
+    content = content.replace(statscards_old, statscards_new)
+
+    # 5. Add Skill Match Analysis Section
+    skill_match_section = """
+        {/* ── SKILL MATCH ANALYSIS (TOP CANDIDATE) ─ */}
+        <div className="glass-card p-6 rounded-2xl animate-slide-up delay-150 border-white/5">
+          <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-amber-400" /> Skill Match Analysis <span className="text-xs text-slate-400 font-normal ml-2">(Top Match: {top.name})</span>
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+              <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+                Matched Skills
+                <span className="bg-emerald-500/20 px-2 py-0.5 rounded-full text-emerald-300">{top.matched_skills?.length || 0}</span>
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {top.matched_skills?.length ? top.matched_skills.map(s => (
+                  <span key={s} className="px-2 py-1 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs rounded shadow-sm">
+                    {s}
+                  </span>
+                )) : <span className="text-xs text-slate-500 italic">No matches</span>}
+              </div>
+            </div>
+            
+            <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/10">
+              <p className="text-xs font-semibold text-rose-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+                Missing Skills
+                <span className="bg-rose-500/20 px-2 py-0.5 rounded-full text-rose-300">{top.missing_skills?.length || 0}</span>
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {top.missing_skills?.length ? top.missing_skills.map(s => (
+                  <span key={s} className="px-2 py-1 bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs rounded shadow-sm opacity-80">
+                    {s}
+                  </span>
+                )) : <span className="text-xs text-slate-500 italic">No missing skills</span>}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10">
+              <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+                Extra Skills
+                <span className="bg-blue-500/20 px-2 py-0.5 rounded-full text-blue-300">{top.extra_skills?.length || 0}</span>
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {top.extra_skills?.length ? top.extra_skills.map(s => (
+                  <span key={s} className="px-2 py-1 bg-blue-500/20 border border-blue-500/30 text-blue-300 text-xs rounded shadow-sm">
+                    {s}
+                  </span>
+                )) : <span className="text-xs text-slate-500 italic">No extra skills</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── CHARTS SECTION ──────────────────────── */}"""
+    content = content.replace("{/* ── CHARTS SECTION ──────────────────────── */}", skill_match_section)
+
+    # 6. Candidate Analysis Table Replace
+    old_table_section = """{/* ── CANDIDATE ANALYSIS PANEL (TABLE) ────── */}"""
+    table_regex = re.compile(r"\{\/\* ── CANDIDATE ANALYSIS PANEL \(TABLE\) ────── \*\/}.*?(?=<\/main>)", re.DOTALL)
+    
+    new_table_section = """{/* ── CANDIDATE ANALYSIS PANEL (TABLE) ────── */}
+        <div className="glass-card rounded-2xl overflow-hidden animate-slide-up delay-300">
+          <div className="p-5 border-b border-white/10 bg-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlignLeft className="w-5 h-5 text-violet-400" />
+              <h3 className="font-semibold text-white">Detailed Candidate Analysis</h3>
+              <span className="text-xs text-slate-400 ml-2">(Click a row or button to preview details)</span>
+            </div>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/5 text-slate-400 text-xs uppercase tracking-wider bg-black/20">
+                  <th className="text-left py-4 px-6 font-medium">Rank</th>
+                  <th className="text-left py-4 px-6 font-medium">Candidate Name</th>
+                  <th className="text-left py-4 px-6 font-medium">Match Score (%)</th>
+                  <th className="text-left py-4 px-6 font-medium">Detected Skills</th>
+                  <th className="text-left py-4 px-6 font-medium">Experience Level</th>
+                  <th className="text-left py-4 px-6 font-medium">Resume Strength</th>
+                  <th className="text-right py-4 px-6 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r, i) => (
+                  <React.Fragment key={r.filename}>
+                    <tr
+                      className="border-b border-white/5 transition-colors hover:bg-white/5 cursor-pointer"
+                      onClick={() => setSelectedCandidate(r)}
+                    >
+                      <td className="py-4 px-6">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm bg-white/5 shadow-sm 
+                          ${i===0 ? 'text-amber-400 border border-amber-500/30' : 
+                            i===1 ? 'text-slate-300 border border-slate-400/30' : 
+                            i===2 ? 'text-orange-400 border border-orange-500/30' : 'text-slate-500'}`}>
+                          {i + 1}
+                        </div>
+                      </td>
+                      <td className="py-4 px-6">
+                        <p className="font-semibold text-white">{r.name}</p>
+                      </td>
+                      <td className="py-4 px-6 w-48">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`font-bold ${SCORE_COLOR(r.score)}`}>{r.score.toFixed(1)}%</span>
+                        </div>
+                        <MatchBar score={r.score} />
+                      </td>
+                      <td className="py-4 px-6">
+                        <div className="flex gap-1.5 flex-wrap max-w-[150px]">
+                          {r.matched_skills?.slice(0,2).map(s => (
+                            <span key={s} className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 truncate max-w-[80px]" title={s}>{s}</span>
+                          ))}
+                          {r.matched_skills?.length > 2 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-400">+{r.matched_skills.length - 2}</span>}
+                        </div>
+                      </td>
+                      <td className="py-4 px-6">
+                        <span className="inline-flex items-center gap-1.5 text-slate-300 bg-white/5 px-2.5 py-1 rounded-md text-xs border border-white/10">
+                          <Briefcase className="w-3.5 h-3.5 text-violet-400" />
+                          {r.experience_level || "Unknown"}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-2">
+                          <div className="w-full bg-white/10 rounded-full h-1.5 max-w-[80px]">
+                            <div className="bg-violet-400 h-1.5 rounded-full" style={{width: `${r.resume_strength || 0}%`}} />
+                          </div>
+                          <span className="text-xs text-slate-400">{r.resume_strength || 0}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              setExpandedRow(prev => prev === r.filename ? null : r.filename); 
+                            }}
+                            className="text-xs py-1 px-3 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/30 rounded-lg transition-colors"
+                          >
+                            {expandedRow === r.filename ? "Close" : "Insight"}
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDownload(r.filename); }}
+                            className="p-1 px-2 bg-white/5 hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-300 rounded-lg transition-colors border border-transparent hover:border-emerald-500/30 flex items-center gap-1"
+                            title="Download Resume"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    
+                    {/* Expandable Match Insight Row */}
+                    {expandedRow === r.filename && (
+                      <tr className="bg-black/40 border-b border-white/5 shadow-inner">
+                        <td colSpan="7" className="p-0">
+                          <div className="p-6 flex flex-col gap-4 animate-slide-up">
+                            <div className="flex items-center gap-2">
+                              <BrainCircuit className="w-5 h-5 text-amber-400" />
+                              <h4 className="font-semibold text-white">Match Insight for {r.name}</h4>
+                            </div>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                              <div>
+                                <h5 className="text-xs text-slate-400 uppercase tracking-widest mb-3 font-medium">Why they matched</h5>
+                                <ul className="space-y-2">
+                                  {(r.match_explanation || []).map((exp, i) => (
+                                    <li key={i} className="flex gap-2 text-sm leading-relaxed p-2.5 rounded-lg bg-white/5 border border-white/5">
+                                      <span className="shrink-0 pt-0.5">{exp.includes('✔') ? '✅' : '❌'}</span>
+                                      <span className="text-slate-300">{exp.replace('✔', '').replace('❌', '').trim()}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div className="flex flex-col gap-3">
+                                <div>
+                                  <h5 className="text-xs text-slate-400 uppercase tracking-widest mb-2 font-medium">Missing Skills</h5>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {r.missing_skills?.length ? r.missing_skills.map(s => (
+                                      <span key={s} className="px-2 py-1 bg-rose-500/10 text-rose-300 border border-rose-500/20 text-xs rounded shadow-sm opacity-90">{s}</span>
+                                    )) : <span className="text-xs text-slate-500">None</span>}
+                                  </div>
+                                </div>
+                                <div>
+                                  <h5 className="text-xs text-slate-400 uppercase tracking-widest mb-2 font-medium">Extra Skills</h5>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {r.extra_skills?.length ? r.extra_skills.map(s => (
+                                      <span key={s} className="px-2 py-1 bg-blue-500/10 text-blue-300 border border-blue-500/20 text-xs rounded shadow-sm">{s}</span>
+                                    )) : <span className="text-xs text-slate-500">None</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+"""
+    content = table_regex.sub(new_table_section, content)
+
+    # 7. Modal Update (Adding Extra Skills)
+    missing_skills_html = """                    <div>
+                      <p className="text-xs text-slate-400 mb-2 font-medium">Missing Requirements</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedCandidate.missing_skills?.length ? selectedCandidate.missing_skills.map(s => (
+                          <span key={s} className="px-2 py-1 bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs rounded-md shadow-sm opacity-80 decoration-rose-500/40">
+                            {s}
+                          </span>
+                        )) : <span className="text-xs text-slate-500 italic">No missing skills!</span>}
+                      </div>
+                    </div>"""
+    
+    missing_and_extra_html = missing_skills_html + """\n
+                    <div>
+                      <p className="text-xs text-slate-400 mb-2 font-medium">Extra Skills</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedCandidate.extra_skills?.length ? selectedCandidate.extra_skills.map(s => (
+                          <span key={s} className="px-2 py-1 bg-blue-500/15 border border-blue-500/30 text-blue-400 text-xs rounded-md shadow-sm">
+                            {s}
+                          </span>
+                        )) : <span className="text-xs text-slate-500 italic">No extra skills found.</span>}
+                      </div>
+                    </div>"""
+    
+    content = content.replace(missing_skills_html, missing_and_extra_html)
+
+    # 8. Import React if not present since we use React.Fragment
+    if "import React" not in content and "import * as React" not in content:
+        content = "import React from 'react'\n" + content
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(content)
+
+if __name__ == '__main__':
+    modify_file(r'c:\Users\NAYAN\Desktop\restart\resume-ranker\frontend\src\pages\ResultsPage.jsx')
