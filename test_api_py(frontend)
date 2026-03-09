@@ -1,0 +1,8 @@
+import requests
+
+url = "http://127.0.0.1:8000/upload"
+data = {"job_description": "Looking for Python, React, AWS"}
+files = [("files", ("test.txt", b"Python developer with React experience."))]
+
+res = requests.post(url, data=data, files=files)
+print(res.json())
