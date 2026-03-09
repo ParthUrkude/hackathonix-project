@@ -1,0 +1,15 @@
+import sys
+import os
+sys.path.append(r"c:\Users\NAYAN\Desktop\restart\resume-ranker\backend")
+from resume_parser import extract_skills
+
+test_jds = [
+    "Looking for a Senior Manager with leadership ability and experience in operations.",
+    "We need a graphic artist who knows photoshop and illustrator.",
+    "Help wanted."
+]
+
+for jd in test_jds:
+    skills = extract_skills(jd, auto_keywords=True)
+    print(f"JD: {jd}")
+    print(f"Extracted: {skills}\n")
