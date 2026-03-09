@@ -1,0 +1,137 @@
+# AI Resume Ranker
+
+An AI-powered full-stack web application that ranks uploaded resumes based on semantic similarity to a job description using **sentence-transformers** (`all-MiniLM-L6-v2`).
+
+---
+
+## Tech Stack
+
+| Layer | Tech |
+|---|---|
+| Frontend | React 18 + Tailwind CSS v3 (Vite) |
+| Backend | Python FastAPI |
+| AI Model | sentence-transformers `all-MiniLM-L6-v2` |
+| File Parsing | pdfplumber + PyPDF2 (PDF), python-docx (DOCX) |
+| Similarity | Cosine similarity via scikit-learn |
+
+---
+
+## Project Structure
+
+```
+resume-ranker/
+├── backend/
+│   ├── main.py              # FastAPI app & API endpoints
+│   ├── resume_parser.py     # PDF/DOCX text extraction + skill detection
+│   ├── ranking_engine.py    # Sentence-transformers embedding + ranking
+│   ├── requirements.txt
+│   └── uploads/             # Uploaded resume files (auto-created)
+└── frontend/
+    └── src/
+        ├── pages/
+        │   ├── LandingPage.jsx
+        │   ├── Dashboard.jsx
+        │   └── ResultsPage.jsx
+        └── components/
+            ├── FileDropzone.jsx
+            ├── RankingCard.jsx
+            ├── MatchBar.jsx
+            └── LoadingSpinner.jsx
+```
+
+---
+
+## Quick Start
+
+### 1. Backend
+
+```bash
+cd resume-ranker/backend
+
+# Install dependencies (Python 3.9+)
+pip install -r requirements.txt
+
+# Start the API server
+python -m uvicorn main:app --reload --port 8000
+```
+
+The API will be available at **http://localhost:8000**  
+Interactive docs: **http://localhost:8000/docs**
+
+> **Note:** On first run, `sentence-transformers` will download the `all-MiniLM-L6-v2` model (~80 MB). Subsequent runs use the cached model.
+
+### 2. Frontend
+
+```bash
+cd resume-ranker/frontend
+
+# Install dependencies
+npm install
+
+# Start dev server
+npm run dev
+```
+
+Open **http://localhost:5173** in your browser.
+
+---
+
+## API Reference
+
+### `POST /upload`
+
+Accepts multipart form data:
+
+| Field | Type | Description |
+|---|---|---|
+| `job_description` | `string` | The job description text |
+| `files` | `File[]` | One or more resume files (PDF/DOCX/TXT) |
+
+**Response:**
+```json
+{
+  "results": [
+    {
+      "rank": 1,
+      "name": "John Doe",
+      "score": 92.4,
+      "skills": ["Python", "React", "AWS", "Docker"],
+      "filename": "abc123_john_doe_resume.pdf",
+      "original_filename": "john_doe_resume.pdf"
+    }
+  ]
+}
+```
+
+### `GET /download/{filename}`
+
+Downloads a previously uploaded resume file.
+
+---
+
+## Features
+
+- 🤖 **AI Semantic Ranking** – Uses transformer embeddings (not just keyword matching)
+- 📁 **Drag & Drop Upload** – Upload multiple PDF/DOCX files at once
+- 🏆 **Top Candidate Spotlight** – Gold-highlighted #1 match
+- 📊 **Match Score Bars** – Animated percentage bars with color tiers
+- 🏷️ **Skill Detection** – Auto-extracts 80+ technical skills from resumes
+- 🔀 **Card / Table View** – Toggle between two result layouts
+- 📥 **Resume Download** – One-click download for any ranked resume
+- 🌙 **Glassmorphism UI** – Dark mode with gradient backgrounds and blur effects
+
+---
+
+## Troubleshooting
+
+**Backend fails with "model download" errors:**  
+Ensure you have internet access on first run for the ~80 MB model download.
+
+**Frontend shows "Failed to connect to backend":**  
+Make sure the backend is running on `http://localhost:8000` before uploading.
+
+**CORS errors in browser:**  
+The backend already has `allow_origins=["*"]` — ensure you're running on `localhost:8000`.
+
+**Resume shows 0% score:**  
+The PDF may be image-based (scanned). Currently text-based PDFs are supported.
