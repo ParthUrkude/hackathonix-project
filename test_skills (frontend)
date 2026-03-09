@@ -1,0 +1,11 @@
+import sys
+import os
+
+sys.path.append(r"c:\Users\NAYAN\Desktop\restart\resume-ranker\backend")
+from resume_parser import extract_skills
+
+sample_jd = "We are looking for a Senior Full Stack Developer with 3+ years of experience. Required Skills: Python, React, AWS, Docker."
+skills = extract_skills(sample_jd)
+
+print(f"Detected skills: {skills}")
+print(f"Length: {len(skills)}")
